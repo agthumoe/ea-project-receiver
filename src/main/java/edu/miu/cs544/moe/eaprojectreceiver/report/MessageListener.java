@@ -28,6 +28,14 @@ public class MessageListener {
     @JmsListener(destination = "${app.messaging.queue}")
     public void receiveMessage(MapMessage message) throws JMSException {
         LOGGER.info("Received message: {}", message);
+        if ("CREATE".equals(message.getString("type"))) {
+            create(message);
+        } else if ("UPDATE".equals(message.getString("type"))) {
+            update(message);
+        }
+    }
+
+    private void create(MapMessage message) throws JMSException {
         Doctor doctor = new Doctor();
         doctor.setUuid(message.getString("doctor.uuid"));
         doctor.setName(message.getString("doctor.name"));
@@ -49,6 +57,37 @@ public class MessageListener {
         report.setDoctor(doctor);
         report.setPatient(patient);
         report.setVisit(visit);
+
+        this.reportRepository.save(report);
+    }
+
+    private void update(MapMessage message) throws JMSException {
+        String visitUuid = message.getString("visit.uuid");
+        String doctorUuid = message.getString("doctor.uuid");
+        String patientUuid = message.getString("patient.uuid");
+        Report report = this.reportRepository.findByVisitUuidAndDoctorUuidAndPatientUuid(visitUuid, doctorUuid, patientUuid).orElseGet(() -> {
+            Doctor doctor = new Doctor();
+            doctor.setUuid(doctorUuid);
+            Visit visit = new Visit();
+            visit.setUuid(visitUuid);
+            Patient patient = new Patient();
+            patient.setUuid(patientUuid);
+            Report newReport = new Report();
+            newReport.setDoctor(doctor);
+            newReport.setVisit(visit);
+            newReport.setPatient(patient);
+            return newReport;
+        });
+        report.getVisit().setDate(message.getString("visit.date"));
+        report.getVisit().setComplaint(message.getString("visit.complaint"));
+        report.getVisit().setProvisionalDiagnosis(message.getString("visit.provisionalDiagnosis"));
+        report.getVisit().setFinalDiagnosis(message.getString("visit.finalDiagnosis"));
+
+        report.getDoctor().setName(message.getString("doctor.name"));
+        report.getDoctor().setSpeciality(message.getString("doctor.speciality"));
+
+        report.getPatient().setName(message.getString("patient.name"));
+        report.getPatient().setAge(message.getString("patient.age"));
 
         this.reportRepository.save(report);
     }
